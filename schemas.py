@@ -36,3 +36,27 @@ class ParsingResult(BaseModel):
     data: Optional[UtilityBill] = None
     errors: List[str] = []
     anomalies: List[str] = []
+
+class RateComponent(BaseModel):
+    name: str # e.g., "Peak", "Off-Peak", "Daily Standing Charge"
+    rate: float # Price per unit (kWh) or per day
+    unit: str # "kWh" or "day"
+    start_time: Optional[str] = None # e.g., "07:00"
+    end_time: Optional[str] = None # e.g., "22:00"
+
+class Tariff(BaseModel):
+    tariff_id: str
+    provider: str
+    name: str
+    type: str # "Flat", "TOU" (Time of Use), "Step"
+    rates: List[RateComponent]
+    description: Optional[str] = None
+
+class OptimizationRecommendation(BaseModel):
+    tariff: Tariff
+    estimated_annual_cost: float
+    potential_savings: float
+    rank: int
+    pros: List[str]
+    cons: List[str]
+    action_item: str
