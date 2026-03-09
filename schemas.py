@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime
 
 class UsageData(BaseModel):
     peak_usage: float = Field(..., description="Consumption during peak hours in kWh")
@@ -60,3 +60,38 @@ class OptimizationRecommendation(BaseModel):
     pros: List[str]
     cons: List[str]
     action_item: str
+
+# --- New Scheduling Schemas ---
+
+class DeviceConfig(BaseModel):
+    id: str
+    name: str = "Smart Device"
+    type: str = "EV" # "EV", "Smart Plug", "HVAC"
+    energy_needed_kwh: float = 40.0
+    power_rate_kw: float = 7.4
+    priority: int = 1 # 1 (High) to 5 (Low)
+
+class SchedulingConstraints(BaseModel):
+    ready_by_time: str = "08:00" # HH:MM format
+    min_charge_level: Optional[float] = 20.0 # Percentage
+    max_charge_level: Optional[float] = 80.0 # Percentage
+    comfort_threshold: Optional[float] = None # For HVAC
+
+class ScheduleSlot(BaseModel):
+    timestamp: datetime
+    price: float
+    is_active: bool
+
+class ScheduleResponse(BaseModel):
+    device_id: str
+    slots: List[ScheduleSlot]
+    total_cost: float
+    savings: float
+    ready_by: str
+    manual_override: bool
+    status: str # "Optimizing", "Charging", "Standby", "Override"
+
+class ScheduleUpdateRequest(BaseModel):
+    device_id: str
+    constraints: Optional[SchedulingConstraints] = None
+    manual_override: Optional[bool] = None

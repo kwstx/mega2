@@ -1,10 +1,20 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from parser import BillParser
+from scheduler import SmartScheduler
+from schemas import DeviceConfig, SchedulingConstraints, ScheduleUpdateRequest
+from predictor import PricePredictor
 import uvicorn
+import pandas as pd
 
 app = FastAPI(title="Utility Bill Parser Service")
 parser = BillParser()
+predictor = PricePredictor()
+
+# In-memory state (Production would use a database)
+current_device = DeviceConfig(id="EV-001", name="Home EV", energy_needed_kwh=40.0)
+current_constraints = SchedulingConstraints(ready_by_time="07:00")
+manual_override_active = False
 
 @app.get("/", response_class=HTMLResponse)
 async def main():
@@ -306,61 +316,142 @@ async def dashboard():
             </div>
             
             <div class="card">
-                <h2>Asset: EV Optimizer</h2>
+                <h2>Asset: EV Scheduler</h2>
                 <div class="stat-card">
-                    <div class="stat-label">Potential Monthly Savings</div>
-                    <div class="stat-value" id="savings-val">loading...</div>
+                    <div class="stat-label">Total Est. Cost</div>
+                    <div class="stat-value" id="total-cost-val">$0.00</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Optimized Charging Window</div>
-                    <div id="window-val" style="font-size:1.1rem; margin-top:0.5rem">loading...</div>
+                    <div class="stat-label">Projected Savings</div>
+                    <div class="stat-value" id="savings-val" style="color:var(--success)">$0.00</div>
                 </div>
-                <div style="margin-top:2rem">
-                    <h3 style="font-size:0.9rem; color:var(--text-muted)">OPTIMIZATION STRATEGY</h3>
-                    <p style="font-size:0.9rem">Shifted 42kWh charging to off-peak window (01:00 - 06:00) to avoid morning price surges.</p>
-                    <div class="badge badge-cheap">Status: Active</div>
+                
+                <div style="margin-top:1.5rem">
+                    <h3 style="font-size:0.9rem; color:var(--text-muted); margin-bottom:0.5rem">CONSTRAINTS</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:0.75rem; border-radius:12px; margin-bottom:1rem">
+                        <span>Ready By:</span>
+                        <input type="time" id="ready-time" value="07:00" style="background:transparent; border:1px solid var(--accent); color:white; padding:0.25rem; border-radius:4px" onchange="updateConstraints()">
+                    </div>
                 </div>
+
+                <div style="margin-top:1.5rem">
+                    <h3 style="font-size:0.9rem; color:var(--text-muted); margin-bottom:0.5rem">SYSTEM STATUS</h3>
+                    <div id="status-badge" class="badge badge-cheap">Optimizing</div>
+                    <p id="strategy-text" style="font-size:0.85rem; margin-top:0.5rem">Shifted charging to lowest price slots before 07:00.</p>
+                </div>
+
+                <button id="override-btn" onclick="toggleOverride()" style="margin-top:1rem; background:rgba(248, 113, 113, 0.1); border:1px solid var(--danger); color:var(--danger); box-shadow:none">
+                    Manual Override
+                </button>
             </div>
         </div>
 
         <script>
+            let currentSchedule = null;
+            let manualOverride = false;
+
             async function fetchData() {
-                const response = await fetch('/api/predict');
+                const response = await fetch('/api/schedule');
                 const data = await response.json();
+                currentSchedule = data;
+                manualOverride = data.manual_override;
                 
+                // Update UI elements
+                document.getElementById('total-cost-val').innerText = "$" + data.total_cost;
+                document.getElementById('savings-val').innerText = "$" + data.savings;
+                document.getElementById('status-badge').innerText = data.status;
+                document.getElementById('status-badge').className = 'badge ' + 
+                    (data.manual_override ? 'badge-expensive' : 'badge-cheap');
+                document.getElementById('strategy-text').innerText = data.manual_override ? 
+                    "System in override mode. Starting charge immediately regardless of price." :
+                    `Optimizing for lowest prices. All requirements will be met by ${data.ready_by}.`;
+                document.getElementById('ready-time').value = data.ready_by;
+                
+                const overrideBtn = document.getElementById('override-btn');
+                if (data.manual_override) {
+                    overrideBtn.innerText = "Cancel Override";
+                    overrideBtn.style.background = "rgba(74, 222, 128, 0.1)";
+                    overrideBtn.style.borderColor = "var(--success)";
+                    overrideBtn.style.color = "var(--success)";
+                } else {
+                    overrideBtn.innerText = "Manual Override";
+                    overrideBtn.style.background = "rgba(248, 113, 113, 0.1)";
+                    overrideBtn.style.borderColor = "var(--danger)";
+                    overrideBtn.style.color = "var(--danger)";
+                }
+
+                // Update Chart
                 const ctx = document.getElementById('priceChart').getContext('2d');
-                new Chart(ctx, {
+                if (window.myChart) window.myChart.destroy();
+                
+                window.myChart = new Chart(ctx, {
                     type: 'line',
                     data: {
-                        labels: data.predictions.map(p => {
-                            const d = new Date(p.timestamp);
+                        labels: data.slots.map(s => {
+                            const d = new Date(s.timestamp);
                             return d.getHours() + ":00";
                         }),
                         datasets: [{
-                            label: 'Predicted Price (c/kWh)',
-                            data: data.predictions.map(p => p.predicted_price),
+                            label: 'Price (c/kWh)',
+                            data: data.slots.map(s => s.price),
                             borderColor: '#6366f1',
-                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            backgroundColor: data.slots.map(s => s.is_active ? 'rgba(34, 211, 238, 0.4)' : 'rgba(99, 102, 241, 0.1)'),
+                            pointBackgroundColor: data.slots.map(s => s.is_active ? 'var(--accent)' : 'transparent'),
+                            pointRadius: data.slots.map(s => s.is_active ? 4 : 0),
                             fill: true,
-                            tension: 0.4,
-                            pointRadius: 0
+                            tension: 0.4
                         }]
                     },
                     options: {
                         responsive: true,
-                        plugins: { legend: { display: false } },
+                        plugins: { 
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    afterLabel: function(context) {
+                                        const slot = data.slots[context.dataIndex];
+                                        return slot.is_active ? "⚡ SCHEDULED" : "○ STANDBY";
+                                    }
+                                }
+                            }
+                        },
                         scales: {
                             y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
                             x: { grid: { display : false }, ticks: { color: '#94a3b8', maxRotation: 0 } }
                         }
                     }
                 });
-
-                document.getElementById('savings-val').innerText = "$" + data.optimization.savings;
-                const hours = data.optimization.charging_schedule.map(s => new Date(s.timestamp).getHours());
-                document.getElementById('window-val').innerText = hours[0] + ":00 - " + (hours[hours.length-1] + 1) + ":00";
             }
+
+            async function updateConstraints() {
+                const readyTime = document.getElementById('ready-time').value;
+                await fetch('/api/schedule/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_id: "EV-001",
+                        constraints: { ready_by_time: readyTime }
+                    })
+                });
+                fetchData();
+            }
+
+            async function toggleOverride() {
+                manualOverride = !manualOverride;
+                await fetch('/api/schedule/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_id: "EV-001",
+                        manual_override: manualOverride
+                    })
+                });
+                fetchData();
+            }
+
             fetchData();
+            // Refresh every 30 seconds
+            setInterval(fetchData, 30000);
         </script>
     </body>
     </html>
@@ -388,6 +479,29 @@ async def get_predictions():
         "predictions": pred_list,
         "optimization": optimization
     }
+
+@app.get("/api/schedule")
+async def get_current_schedule():
+    predictions = predictor.predict()
+    if predictions is None:
+        raise HTTPException(status_code=500, detail="Failed to get price predictions")
+    
+    scheduler = SmartScheduler(current_device, current_constraints)
+    schedule = scheduler.get_schedule(predictions, manual_override=manual_override_active)
+    
+    return schedule
+
+@app.post("/api/schedule/update")
+async def update_schedule(request: ScheduleUpdateRequest):
+    global current_constraints, manual_override_active
+    
+    if request.constraints:
+        current_constraints = request.constraints
+    
+    if request.manual_override is not None:
+        manual_override_active = request.manual_override
+        
+    return {"status": "success", "manual_override": manual_override_active, "ready_by": current_constraints.ready_by_time}
 
 
 

@@ -9,6 +9,12 @@ class PricePredictor:
     def __init__(self):
         self.model = RandomForestRegressor(n_estimators=100, random_state=42)
         self.model_path = "price_model.pkl"
+        self._load_model()
+        
+    def _load_model(self):
+        if os.path.exists(self.model_path):
+            with open(self.model_path, 'rb') as f:
+                self.model = pickle.load(f)
         
     def train(self, data_path="historical_prices.csv"):
         if not os.path.exists(data_path):
