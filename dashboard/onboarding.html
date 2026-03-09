@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onboarding | Lumina</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f111a;
+            --primary: #9b70ff;
+            --primary-hover: #b392ff;
+            --secondary: #22d3ee;
+            --lime: #d4ff39;
+            --text-light: #ffffff;
+            --text-muted: #94a3b8;
+            --card-bg: rgba(30, 33, 43, 0.6);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --success: #4ade80;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(155, 112, 255, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(34, 211, 238, 0.15), transparent 25%);
+            overflow: hidden;
+        }
+
+        .onboarding-container {
+            width: 100%;
+            max-width: 650px;
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Progress Steps */
+        .progress-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+            position: relative;
+        }
+
+        .progress-container::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--border-color);
+            transform: translateY(-50%);
+            z-index: 0;
+        }
+
+        .progress-bar {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--secondary), var(--primary));
+            transform: translateY(-50%);
+            z-index: 0;
+            transition: width 0.4s ease;
+        }
+
+        .step-indicator {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--bg-dark);
+            border: 2px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+            transition: all 0.3s ease;
+            color: var(--text-muted);
+        }
+
+        .step-indicator.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            box-shadow: 0 0 15px rgba(155, 112, 255, 0.3);
+        }
+
+        .step-indicator.completed {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        /* Step Content */
+        .step-content {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .step-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .step-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            background: linear-gradient(to right, #fff, var(--text-muted));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .step-desc {
+            color: var(--text-muted);
+            margin-bottom: 30px;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        /* Devices Grid */
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .device-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .device-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .device-card.selected {
+            border-color: var(--primary);
+            background: rgba(155, 112, 255, 0.1);
+            box-shadow: 0 0 20px rgba(155, 112, 255, 0.15);
+        }
+
+        .device-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+        }
+
+        .device-info h3 {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .device-info p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Upload Area */
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 16px;
+            padding: 40px 20px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover,
+        .upload-area.dragover {
+            border-color: var(--secondary);
+            background: rgba(34, 211, 238, 0.05);
+        }
+
+        .upload-icon {
+            font-size: 40px;
+            margin-bottom: 16px;
+            display: block;
+            color: var(--text-muted);
+        }
+
+        .upload-area.dragover .upload-icon {
+            color: var(--secondary);
+            transform: scale(1.1);
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        .form-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #fff;
+            font-size: 15px;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        .form-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(155, 112, 255, 0.2);
+        }
+
+        /* Range Slider Styling */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: var(--lime);
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 0 10px rgba(212, 255, 57, 0.5);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: var(--border-color);
+            border-radius: 2px;
+        }
+
+        .slider-val {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 14px;
+            font-weight: 600;
+            min-width: 65px;
+            text-align: center;
+        }
+
+        /* Action Buttons */
+        .actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text-light);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            box-shadow: 0 10px 20px -5px rgba(155, 112, 255, 0.4);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px -5px rgba(155, 112, 255, 0.5);
+        }
+
+        /* Success Step */
+        .success-content {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(74, 222, 128, 0.1);
+            color: var(--success);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            margin: 0 auto 24px;
+            box-shadow: 0 0 30px rgba(74, 222, 128, 0.2);
+        }
+
+        #file-name-display {
+            margin-top: 10px;
+            color: var(--secondary);
+            font-size: 14px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="onboarding-container">
+
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+            <div class="step-indicator active" id="indicator-1">1</div>
+            <div class="step-indicator" id="indicator-2">2</div>
+            <div class="step-indicator" id="indicator-3">3</div>
+            <div class="step-indicator" id="indicator-4">✓</div>
+        </div>
+
+        <!-- Step 1: Devices -->
+        <div class="step-content active" id="step-1">
+            <h2 class="step-title">Link Your Devices</h2>
+            <p class="step-desc">Select the smart devices in your home you'd like us to optimize automatically. We'll
+                ensure your routines are never disrupted.</p>
+
+            <div class="devices-grid">
+                <div class="device-card" onclick="toggleDevice(this)">
+                    <div class="device-icon">🚗</div>
+                    <div class="device-info">
+                        <h3>EV Charger</h3>
+                        <p>Smart charging control</p>
+                    </div>
+                </div>
+                <div class="device-card" onclick="toggleDevice(this)">
+                    <div class="device-icon">🌡️</div>
+                    <div class="device-info">
+                        <h3>Thermostat</h3>
+                        <p>HVAC optimization</p>
+                    </div>
+                </div>
+                <div class="device-card" onclick="toggleDevice(this)">
+                    <div class="device-icon">☀️</div>
+                    <div class="device-info">
+                        <h3>Solar Inverter</h3>
+                        <p>Energy generation</p>
+                    </div>
+                </div>
+                <div class="device-card" onclick="toggleDevice(this)">
+                    <div class="device-icon">🔌</div>
+                    <div class="device-info">
+                        <h3>Smart Plugs</h3>
+                        <p>Appliance control</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Bill Upload -->
+        <div class="step-content" id="step-2">
+            <h2 class="step-title">Upload Utility Bill</h2>
+            <p class="step-desc">Upload a recent electricity bill (PDF or CSV). We extract your consumption rates and
+                tariffs to build your distinct cost profile.</p>
+
+            <div class="upload-area" id="drop-zone" onclick="document.getElementById('file-upload').click()">
+                <span class="upload-icon">📄</span>
+                <span style="font-size: 16px; font-weight: 500;">Click to upload or drag and drop</span>
+                <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Supports .pdf and .csv</p>
+                <input type="file" id="file-upload" accept=".pdf,.csv" style="display: none;"
+                    onchange="handleFileSelect(this)">
+                <div id="file-name-display"></div>
+            </div>
+        </div>
+
+        <!-- Step 3: Comfort Preferences -->
+        <div class="step-content" id="step-3">
+            <h2 class="step-title">Set Comfort Boundaries</h2>
+            <p class="step-desc">Define your hard limits. Our AI will optimize energy usage completely in the background
+                without violating these rules.</p>
+
+            <div class="form-group">
+                <label class="form-label">EV Ready By Time</label>
+                <input type="time" class="form-input" id="ev-time" value="07:00">
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Your EV will be charged to your
+                    target level by this time.</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Base Temperature Comfort Range</label>
+                <div class="slider-container">
+                    <span class="slider-val" id="temp-val">72°F</span>
+                    <input type="range" min="65" max="80" value="72" id="temp-slider"
+                        oninput="updateTempVal(this.value)">
+                </div>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">We will pre-heat or pre-cool your
+                    home without leaving this comfortable range.</p>
+            </div>
+        </div>
+
+        <!-- Step 4: Success -->
+        <div class="step-content" id="step-4">
+            <div class="success-content">
+                <div class="success-icon">✓</div>
+                <h2 class="step-title" style="margin-bottom: 16px;">System Verified</h2>
+                <p class="step-desc">Your profile is initialized. Lumina is now securely modeling your energy
+                    architecture and deploying optimization agents to your linked devices.</p>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions" id="action-buttons">
+            <button class="btn btn-outline" id="prev-btn" onclick="prevStep()" style="visibility: hidden;">Back</button>
+            <button class="btn btn-primary" id="next-btn" onclick="nextStep()">Continue</button>
+        </div>
+
+    </div>
+
+    <script>
+        let currentStep = 1;
+        const totalSteps = 4;
+
+        function toggleDevice(element) {
+            element.classList.toggle('selected');
+        }
+
+        const dropZone = document.getElementById('drop-zone');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropZone.classList.add('dragover');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('dragover');
+        }
+
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            handleFiles(files);
+        }
+
+        function handleFileSelect(input) {
+            handleFiles(input.files);
+        }
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                document.getElementById('file-name-display').innerText = "Selected: " + files[0].name;
+            }
+        }
+
+        function updateTempVal(val) {
+            document.getElementById('temp-val').innerText = val + "°F";
+        }
+
+        function updateUI() {
+            // Update steps visibility
+            for (let i = 1; i <= totalSteps; i++) {
+                document.getElementById(`step-${i}`).classList.remove('active');
+                const indicator = document.getElementById(`indicator-${i}`);
+                if (i < currentStep) {
+                    indicator.classList.add('completed');
+                    indicator.classList.remove('active');
+                } else if (i === currentStep) {
+                    indicator.classList.add('active');
+                    indicator.classList.remove('completed');
+                } else {
+                    indicator.classList.remove('active');
+                    indicator.classList.remove('completed');
+                }
+            }
+
+            document.getElementById(`step-${currentStep}`).classList.add('active');
+
+            // Update progress bar
+            const progress = ((currentStep - 1) / (totalSteps - 1)) * 100;
+            document.getElementById('progress-bar').style.width = `${progress}%`;
+
+            // Update buttons
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+
+            if (currentStep === 1) {
+                prevBtn.style.visibility = 'hidden';
+            } else if (currentStep < totalSteps) {
+                prevBtn.style.visibility = 'visible';
+            } else {
+                prevBtn.style.display = 'none';
+            }
+
+            if (currentStep === totalSteps - 1) {
+                nextBtn.innerText = 'Launch Automation';
+            } else if (currentStep === totalSteps) {
+                nextBtn.innerText = 'Go to Dashboard';
+                nextBtn.onclick = () => window.location.href = 'index.html';
+            } else {
+                nextBtn.innerText = 'Continue';
+            }
+        }
+
+        function nextStep() {
+            if (currentStep < totalSteps) {
+                currentStep++;
+                updateUI();
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateUI();
+            }
+        }
+    </script>
+</body>
+
+</html>
