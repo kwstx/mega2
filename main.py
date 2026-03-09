@@ -1,6 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 from parser import BillParser
 from scheduler import SmartScheduler
 from schemas import DeviceConfig, SchedulingConstraints, ScheduleUpdateRequest
@@ -8,7 +9,17 @@ from predictor import PricePredictor
 import uvicorn
 import pandas as pd
 import os
+import time
 from twilio.rest import Client
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+
+from database import init_db, get_db, User, encrypt_data
+from auth import get_current_user, create_access_token, get_password_hash, verify_password
+from logging_setup import setup_logging
+
+logger = setup_logging()
+init_db()
 
 app = FastAPI(title="Utility Bill Parser Service")
 
@@ -19,6 +30,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    logger.info(f"{request.method} {request.url.path} - Status: {response.status_code} - Time: {process_time:.4f}s")
+    return response
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "version": "1.0.0"}
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    email: str
+
+@app.post("/register")
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    encrypted_email = encrypt_data(user.email)
+    hashed_password = get_password_hash(user.password)
+    
+    new_user = User(username=user.username, hashed_password=hashed_password, encrypted_email=encrypted_email)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    logger.info(f"New user registered: {user.username}")
+    return {"msg": "User created successfully"}
+
+@app.post("/token")
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        logger.warning(f"Failed login attempt for username: {form_data.username}")
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    
+    access_token = create_access_token(data={"sub": user.username})
+    logger.info(f"User logged in: {user.username}")
+    return {"access_token": access_token, "token_type": "bearer"}
+
 parser = BillParser()
 predictor = PricePredictor()
 
@@ -515,7 +571,7 @@ async def get_predictions():
     }
 
 @app.get("/api/schedule")
-async def get_current_schedule():
+async def get_current_schedule(current_user: User = Depends(get_current_user)):
     global last_sent_notification
 
     predictions = predictor.predict()
@@ -532,7 +588,7 @@ async def get_current_schedule():
     return schedule
 
 @app.post("/api/schedule/update")
-async def update_schedule(request: ScheduleUpdateRequest):
+async def update_schedule(request: ScheduleUpdateRequest, current_user: User = Depends(get_current_user)):
     global current_constraints, manual_override_active, last_sent_notification
     
     if request.constraints:
@@ -564,4 +620,11 @@ async def upload_bill(file: UploadFile = File(...)):
     return result
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    ssl_cert = "cert.pem"
+    ssl_key = "key.pem"
+    if os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+        logger.info("Starting with TLS enabled...")
+        uvicorn.run(app, host="0.0.0.0", port=8000, ssl_keyfile=ssl_key, ssl_certfile=ssl_cert)
+    else:
+        logger.warning("TLS certificates not found. Starting without encryption.")
+        uvicorn.run(app, host="0.0.0.0", port=8000)
