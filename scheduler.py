@@ -73,6 +73,16 @@ class SmartScheduler:
         dumb_cost = (dumb_slots['predicted_price'] * (self.device.energy_needed_kwh / num_slots)).sum() / 100
         savings = dumb_cost - total_cost
 
+        notification = None
+        if not manual_override and savings > 0.01:
+            try:
+                # Find the earliest slot in the active schedule
+                start_time = pd.to_datetime(charging_slots['timestamp']).min()
+                start_time_str = start_time.strftime("%I %p").lstrip("0")
+                notification = f"Charging your {self.device.type} at {start_time_str} saves €{savings:.2f} today. (AI selected lowest-cost periods before {self.constraints.ready_by_time})"
+            except Exception:
+                pass
+
         return ScheduleResponse(
             device_id=self.device.id,
             slots=all_slots,
@@ -80,7 +90,8 @@ class SmartScheduler:
             savings=round(max(0, savings), 2),
             ready_by=self.constraints.ready_by_time,
             manual_override=self.manual_override,
-            status=status
+            status=status,
+            notification=notification
         )
 
 if __name__ == "__main__":

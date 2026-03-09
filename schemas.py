@@ -90,6 +90,7 @@ class ScheduleResponse(BaseModel):
     ready_by: str
     manual_override: bool
     status: str # "Optimizing", "Charging", "Standby", "Override"
+    notification: Optional[str] = None
 
 class ScheduleUpdateRequest(BaseModel):
     device_id: str

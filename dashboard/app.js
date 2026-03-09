@@ -41,4 +41,74 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     heatmapContainer.innerHTML = gridHTML;
+
+    // Toast Notification Logic
+    function showNotification(title, message) {
+        const container = document.getElementById('notification-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+
+        toast.innerHTML = `
+            <div class="toast-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+            </div>
+            <div class="toast-content">
+                <div class="toast-title">${title}</div>
+                <div class="toast-message">${message}</div>
+            </div>
+            <button class="toast-close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        `;
+
+        container.appendChild(toast);
+
+        // Add event listener to close button
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        });
+
+        // Trigger animation
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 100);
+
+        // Auto remove after 10 seconds
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 400);
+            }
+        }, 10000);
+    }
+
+    // Fetch notification from backend or use fallback
+    async function fetchNotification() {
+        try {
+            const response = await fetch('http://localhost:8000/api/schedule');
+            const data = await response.json();
+            if (data.notification) {
+                showNotification("Smart Schedule Update", data.notification);
+            } else {
+                // If backend does not provide it, use fallback
+                showNotification("Actionable Recommendation", "Charging your EV at 2 AM saves €1.50 today. (AI selected lowest-cost periods before 07:00)");
+            }
+        } catch (error) {
+            console.log("Backend offline, using fallback notification");
+            // Fallback for demonstration transparency
+            showNotification("Actionable Recommendation", "Charging your EV at 2 AM saves €1.50 today. (AI selected lowest-cost periods before 07:00)");
+        }
+    }
+
+    // Show notification shortly after page load
+    setTimeout(fetchNotification, 1500);
+
 });

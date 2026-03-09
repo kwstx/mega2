@@ -1,13 +1,24 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from parser import BillParser
 from scheduler import SmartScheduler
 from schemas import DeviceConfig, SchedulingConstraints, ScheduleUpdateRequest
 from predictor import PricePredictor
 import uvicorn
 import pandas as pd
+import os
+from twilio.rest import Client
 
 app = FastAPI(title="Utility Bill Parser Service")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 parser = BillParser()
 predictor = PricePredictor()
 
@@ -15,6 +26,29 @@ predictor = PricePredictor()
 current_device = DeviceConfig(id="EV-001", name="Home EV", energy_needed_kwh=40.0)
 current_constraints = SchedulingConstraints(ready_by_time="07:00")
 manual_override_active = False
+last_sent_notification = None
+
+def send_sms_notification(message_body: str):
+    # Retrieve credentials from environment variables, or use placeholders for demonstration
+    account_sid = os.environ.get('TWILIO_ACCOUNT_SID', 'AC_placeholder_sid')
+    auth_token = os.environ.get('TWILIO_AUTH_TOKEN', 'placeholder_auth_token')
+    twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER', '+1234567890')
+    user_phone_number = os.environ.get('USER_PHONE_NUMBER', '+0987654321')
+
+    if 'placeholder' in account_sid:
+        print(f"Mock SMS sent to {user_phone_number}: {message_body}")
+        return
+
+    try:
+        client = Client(account_sid, auth_token)
+        message = client.messages.create(
+            body=message_body,
+            from_=twilio_phone_number,
+            to=user_phone_number
+        )
+        print(f"SMS sent successfully: {message.sid}")
+    except Exception as e:
+        print(f"Failed to send SMS: {e}")
 
 @app.get("/", response_class=HTMLResponse)
 async def main():
@@ -482,6 +516,8 @@ async def get_predictions():
 
 @app.get("/api/schedule")
 async def get_current_schedule():
+    global last_sent_notification
+
     predictions = predictor.predict()
     if predictions is None:
         raise HTTPException(status_code=500, detail="Failed to get price predictions")
@@ -489,17 +525,25 @@ async def get_current_schedule():
     scheduler = SmartScheduler(current_device, current_constraints)
     schedule = scheduler.get_schedule(predictions, manual_override=manual_override_active)
     
+    if schedule.notification and schedule.notification != last_sent_notification:
+        send_sms_notification(schedule.notification)
+        last_sent_notification = schedule.notification
+
     return schedule
 
 @app.post("/api/schedule/update")
 async def update_schedule(request: ScheduleUpdateRequest):
-    global current_constraints, manual_override_active
+    global current_constraints, manual_override_active, last_sent_notification
     
     if request.constraints:
         current_constraints = request.constraints
+        # Reset notification when constraints change so it can trigger again
+        last_sent_notification = None
     
     if request.manual_override is not None:
         manual_override_active = request.manual_override
+        # Reset notification on manual override changes
+        last_sent_notification = None
         
     return {"status": "success", "manual_override": manual_override_active, "ready_by": current_constraints.ready_by_time}
 
